@@ -1,6 +1,5 @@
 ﻿namespace MVL.Core;
 
-public class Class1
+public interface IMessage
 {
-
 }
