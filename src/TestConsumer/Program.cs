@@ -3,7 +3,7 @@ using MVL.Core;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.AddMvl(new MvlSettings { ConnectionString = "localhost", QueueName = "hello" });
+builder.AddMvl(new MvlSettings { ConnectionString = "localhost" });
 
 var host = builder.Build();
 host.Run();

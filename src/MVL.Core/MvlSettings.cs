@@ -2,6 +2,5 @@
 
 public class MvlSettings
 {
-    public string ConnectionString { get; set; }
-    public string QueueName { get; set; }
+    public required string ConnectionString { get; set; }
 }

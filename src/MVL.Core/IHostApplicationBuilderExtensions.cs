@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
+using System.Reflection;
 
 namespace MVL.Core;
 
@@ -10,27 +11,58 @@ public static class IHostApplicationBuilderExtensions
     public static IHostApplicationBuilder AddMvl(this IHostApplicationBuilder hostApplicationBuilder, MvlSettings settings)
     {
         var factory = new ConnectionFactory { HostName = "localhost" };
-        using var connection = factory.CreateConnectionAsync().Result;
-        using var channel = connection.CreateChannelAsync().Result;
+        var connection = factory.CreateConnectionAsync().Result;
+        var channel = connection.CreateChannelAsync().Result;
 
-        foreach (var queue in GetQueuesToCreate())
+        var exchanges = GetExchangesToCreate();
+        foreach (var exchange in exchanges)
         {
-            channel.QueueDeclareAsync(queue: queue, durable: false, exclusive: false, autoDelete: false,
-                arguments: null);
+            channel.ExchangeDeclareAsync(exchange, ExchangeType.Direct);
+        }
+
+        var consumers = GetConsumers();
+        foreach (var consumer in consumers)
+        {
+            channel.QueueDeclareAsync(consumer.Item1.FullName, durable: false, exclusive: false, autoDelete: false, arguments: null);
+
+            channel.QueueBindAsync(consumer.Item1.FullName, consumer.Item2.FullName, string.Empty);
         }
 
         hostApplicationBuilder.Services.AddHostedService<MessagingService>();
         hostApplicationBuilder.Services.AddSingleton(settings);
+        hostApplicationBuilder.Services.AddSingleton(channel);
+
+        hostApplicationBuilder.Services.AddSingleton<IMessageContext, MessageContext>();
+
         return hostApplicationBuilder;
     }
 
-    private static IEnumerable<string> GetQueuesToCreate()
+    private static IEnumerable<string> GetExchangesToCreate()
     {
         var type = typeof(IMessage);
         var types = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(s => s.GetTypes())
-            .Where(p => type.IsAssignableFrom(p) && p.IsClass);
+            .Where(p => type.IsAssignableFrom(p) && p is { IsClass: true, IsGenericType: false });
 
-        return types.Select(t => t.Name);
+        return types.Select(t => t.FullName!);
+    }
+
+    public static IEnumerable<(Type ConsumerType, Type MessageType)> GetConsumers()
+    {
+        var types = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(GetConsumersByAssembly);
+
+        return types;
+    }
+
+    public static IEnumerable<(Type ConsumerType, Type MessageType)> GetConsumersByAssembly(Assembly assembly)
+    {
+        return assembly.GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false })
+            .SelectMany(t => t.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConsumer<>))
+                .Where(i => typeof(IMessage).IsAssignableFrom(i.GetGenericArguments()[0]))
+                .Select(i => (ConsumerType: t, MessageType: i.GetGenericArguments()[0]))
+            );
     }
 }
