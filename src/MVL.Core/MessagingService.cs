@@ -1,11 +1,12 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 
 namespace MVL.Core;
 
@@ -13,13 +14,17 @@ internal class MessagingService : IHostedService
 {
     private readonly IOptions<MvlOptions> _options;
     private readonly ILogger<MessagingService> _logger;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IChannel _channel;
 
-    public MessagingService(IOptions<MvlOptions> options, ILogger<MessagingService> logger, IChannel channel)
+    public MessagingService(IOptions<MvlOptions> options, ILogger<MessagingService> logger, IChannel channel, IServiceProvider serviceProvider, IServiceScopeFactory scopeFactory)
     {
         _options = options;
         _logger = logger;
         _channel = channel;
+        _serviceProvider = serviceProvider;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -42,13 +47,16 @@ internal class MessagingService : IHostedService
 
                 var casted = (IMessage)Convert.ChangeType(messageDeserialised, consumer.MessageType);
 
-                var handler = Activator.CreateInstance(consumer.ConsumerType);
+                using var scope = _scopeFactory.CreateScope();
 
-                var methodInfo = consumer.ConsumerType.GetMethod(nameof(IConsumer<IMessage>.ConsumeAsync));
-                
-                var argumentsList = new object[] { casted, cancellationToken };
+                var consumerContext =
+                    Activator.CreateInstance(
+                        typeof(ConsumerContext<,>).MakeGenericType(consumer.ConsumerType, consumer.MessageType));
 
-                methodInfo.Invoke(handler, argumentsList);
+                if (consumerContext is IConsumerContext context)
+                {
+                    await context.Consume(_serviceProvider, casted, cancellationToken);
+                }
             };
 
             consumerDeclarations.Add(_channel.BasicConsumeAsync(consumer.ConsumerType.FullName, autoAck: true, consumer: basicConsumer, cancellationToken: cancellationToken));
@@ -81,5 +89,25 @@ internal class MessagingService : IHostedService
                 .Where(i => typeof(IMessage).IsAssignableFrom(i.GetGenericArguments()[0]))
                 .Select(i => (ConsumerType: t, MessageType: i.GetGenericArguments()[0]))
             );
+    }
+}
+
+public interface IConsumerContext
+{
+    Task Consume(IServiceProvider services, object message, CancellationToken cancellationToken);
+}
+
+public class ConsumerContext<TConsumer, TMessage> : IConsumerContext
+    where TMessage : IMessage
+    where TConsumer: IConsumer<TMessage>
+{
+    public async Task Consume(IServiceProvider services, object message, CancellationToken cancellationToken)
+    {
+        var consumer = services.GetRequiredService<TConsumer>();
+
+        if (message is TMessage messageCasted)
+        {
+            await consumer.ConsumeAsync(messageCasted, cancellationToken);
+        }
     }
 }

@@ -5,6 +5,8 @@ using TestProducer;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Services.AddScoped<TestConsumer>();
+
 builder.AddMvl(options =>
 {
     options.ConnectionString = "localhost";
