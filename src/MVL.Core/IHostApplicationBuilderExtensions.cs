@@ -8,9 +8,12 @@ namespace MVL.Core;
 // ReSharper disable once InconsistentNaming
 public static class IHostApplicationBuilderExtensions
 {
-    public static IHostApplicationBuilder AddMvl(this IHostApplicationBuilder hostApplicationBuilder, MvlSettings settings)
+    public static IHostApplicationBuilder AddMvl(this IHostApplicationBuilder hostApplicationBuilder, Action<MvlOptions> mvlOptions)
     {
-        var factory = new ConnectionFactory { HostName = "localhost" };
+        var options = new MvlOptions();
+        mvlOptions.Invoke(options);
+
+        var factory = new ConnectionFactory { HostName = options.ConnectionString };
         var connection = factory.CreateConnectionAsync().Result;
         var channel = connection.CreateChannelAsync().Result;
 
@@ -29,7 +32,7 @@ public static class IHostApplicationBuilderExtensions
         }
 
         hostApplicationBuilder.Services.AddHostedService<MessagingService>();
-        hostApplicationBuilder.Services.AddSingleton(settings);
+        hostApplicationBuilder.Services.Configure(mvlOptions);
         hostApplicationBuilder.Services.AddSingleton(channel);
 
         hostApplicationBuilder.Services.AddSingleton<IMessageContext, MessageContext>();

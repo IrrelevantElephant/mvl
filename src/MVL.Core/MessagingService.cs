@@ -5,18 +5,19 @@ using RabbitMQ.Client.Events;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace MVL.Core;
 
 internal class MessagingService : IHostedService
 {
-    private readonly MvlSettings _mvlSettings;
+    private readonly IOptions<MvlOptions> _options;
     private readonly ILogger<MessagingService> _logger;
     private readonly IChannel _channel;
 
-    public MessagingService(MvlSettings mvlSettings, ILogger<MessagingService> logger, IChannel channel)
+    public MessagingService(IOptions<MvlOptions> options, ILogger<MessagingService> logger, IChannel channel)
     {
-        _mvlSettings = mvlSettings;
+        _options = options;
         _logger = logger;
         _channel = channel;
     }

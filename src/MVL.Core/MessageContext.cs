@@ -1,5 +1,5 @@
-﻿using RabbitMQ.Client;
-using System.Collections.Generic;
+﻿using Microsoft.Extensions.Options;
+using RabbitMQ.Client;
 using System.Text;
 using System.Text.Json;
 
@@ -7,12 +7,12 @@ namespace MVL.Core;
 
 public class MessageContext : IMessageContext
 {
-    private readonly MvlSettings _settings;
+    private readonly IOptions<MvlOptions> _options;
     private IChannel? _channel;
 
-    public MessageContext(MvlSettings settings)
+    public MessageContext(IOptions<MvlOptions> options)
     {
-        _settings = settings;
+        _options = options;
     }
 
     public async Task PublishAsync(IMessage message, CancellationToken cancellationToken)
@@ -35,7 +35,7 @@ public class MessageContext : IMessageContext
         if (_channel != null)
             return;
 
-        var hostName = _settings.ConnectionString;
+        var hostName = _options.Value.ConnectionString;
 
         var factory = new ConnectionFactory { HostName = hostName };
         var connection = await factory.CreateConnectionAsync();

@@ -5,7 +5,10 @@ using TestProducer;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.AddMvl(new MvlSettings { ConnectionString = "localhost" });
+builder.AddMvl(options =>
+{
+    options.ConnectionString = "localhost";
+});
 
 var host = builder.Build();
 
